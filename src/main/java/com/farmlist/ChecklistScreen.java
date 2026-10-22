@@ -89,4 +89,84 @@ public class ChecklistScreen extends Screen {
             if (y > this.height - 30) break; // rows that don't fit are cut off for now
             String id = e.getKey();
             boolean done = progress.isChecked(id);
-            String
+            String shown = FarmListClient.BUILDING_BLOCK.equals(id)
+                    ? "building block (" + displayName(FarmListClient.countedId(id, progress)) + ")"
+                    : id;
+            String label = (done ? "[x] " : "[ ] ") + shown + "  x" + e.getValue();
+            addRenderableWidget(Button.builder(Component.literal(label), b -> {
+                progress.set(id, !progress.isChecked(id));
+                rebuild();
+            }).bounds(left, y, FarmListClient.BUILDING_BLOCK.equals(id) ? BUTTON_WIDTH - 120 : BUTTON_WIDTH, 20).build());
+
+            if (FarmListClient.BUILDING_BLOCK.equals(id)) {
+                addRenderableWidget(Button.builder(Component.literal("<"), b -> {
+                    progress.setChoice(id, previousOption(progress.getChoice(id)));
+                    rebuild();
+                }).bounds(left + BUTTON_WIDTH - 116, y, 28, 20).build());
+
+                addRenderableWidget(Button.builder(Component.literal("Next >"), b -> {
+                    progress.setChoice(id, nextOption(progress.getChoice(id)));
+                    rebuild();
+                }).bounds(left + BUTTON_WIDTH - 86, y, 86, 20).build());
+            }
+            y += ROW_HEIGHT;
+        }
+    }
+
+    private void scanInventory() {
+        Map<String, Integer> required = FarmListClient.parseRequired(
+                FarmListClient.TRANSCRIPTION_DIR.resolve(openFile));
+        Map<String, Integer> have = FarmListClient.countInventory();
+        Progress progress = new Progress(openFile.replace(".txt", ""));
+        for (Map.Entry<String, Integer> e : required.entrySet()) {
+            String counted = FarmListClient.countedId(e.getKey(), progress);
+            if (FarmListClient.BUILDING_BLOCK.equals(e.getKey()) && progress.getChoice(e.getKey()) == null) {
+                continue; // no block picked yet, so nothing to count
+            }
+            if (have.getOrDefault(counted, 0) >= e.getValue()) {
+                progress.set(e.getKey(), true);
+            }
+        }
+    }
+
+    /** Next block after the current choice, wrapping around. Starts at the first block if none chosen. */
+    private static String nextOption(String current) {
+        var options = FarmListClient.blockOptions();
+        if (current == null) return options.get(0);
+        int i = options.indexOf(current);
+        return options.get((i + 1) % options.size());
+    }
+
+    /** Previous block before the current choice, wrapping around. */
+    private static String previousOption(String current) {
+        var options = FarmListClient.blockOptions();
+        if (current == null) return options.get(options.size() - 1);
+        int i = options.indexOf(current);
+        return options.get((i - 1 + options.size()) % options.size());
+    }
+
+    private static String displayName(String id) {
+        return id.replace('_', ' ');
+    }
+
+    @Override
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(g, mouseX, mouseY, partialTick);
+        if (!FarmListClient.status.isEmpty()) {
+            g.centeredText(this.font, Component.literal(FarmListClient.status), this.width / 2, this.height - 14, 0xFFFFFFFF);
+        }
+        if (openFile == null) {
+            g.centeredText(this.font, Component.literal("Choose a checklist to import"), this.width / 2, 14, 0xFFFFFFFF);
+            if (FarmListClient.listTranscriptions().isEmpty()) {
+                g.centeredText(this.font,
+                        Component.literal("No transcriptions yet. Add files to .minecraft/farmlist/transcriptions/"),
+                        this.width / 2, 60, 0xFFAAAAAA);
+            }
+        }
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+}
